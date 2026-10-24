@@ -58,8 +58,19 @@ export default {
         return json({ state: started.body.state || cs.state, name: cs.name });
       }
       if (url.pathname === "/status" && request.method === "GET") {
-        const cs = await findCodespace(env);
-        return json({ state: cs ? cs.state : "unknown", name: cs ? cs.name : null });
+        // Diagnostic version: reports GitHub's own answers (never the token)
+        const name = env.CODESPACES_NAME || "legendary-umbrella-xj46wvv5w99399pw";
+        const direct = await gh(env, `/user/codespaces/${encodeURIComponent(name)}`);
+        let listInfo = null;
+        if (direct.status !== 200) {
+          const list = await gh(env, "/user/codespaces");
+          listInfo = { status: list.status, count: (list.body.codespaces || []).length,
+                       names: (list.body.codespaces || []).map((c) => c.name),
+                       message: list.body.message || null };
+        }
+        const cs = direct.status === 200 ? direct.body : null;
+        return json({ state: cs ? cs.state : "unknown", name: cs ? cs.name : null,
+                      diag: { direct_status: direct.status, direct_message: direct.body.message || null, list: listInfo } });
       }
       return new Response("not found", { status: 404, headers: CORS });
     } catch (e) {
