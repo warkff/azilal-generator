@@ -3,7 +3,11 @@
 Handles typed text, speech transcripts and OCR output. Supported date
 shapes per line:
   - «توبة الى الله 12-10»  / «12/10 توبة الى الله»  / «توبة: 12.10.2026»
-  - «توبة الى الله 12 أكتوبر» / «12 شتنبر توبة»
+  - «توبة الى الله 12 أكتوبر» / «12 شتنبر توبة» / «12 من أكتوبر»
+  - day-only, session month is used: «توبة الى الله يوم 12»
+  - number words, common in speech: «توبة يوم ثالث» / «الصلاة يوم خمسة»
+  - word + month: «الثالث أكتوبر»
+  - space-separated (last resort): «توبة 12 10»
 Arabic-Indic digits (٠١٢٣) are normalized. Lines without a date are
 returned as `unparsed` so the caller can show them for correction.
 """
@@ -20,8 +24,80 @@ MONTH_WORDS = {
 }
 _MONTH_ALT = "|".join(sorted(MONTH_WORDS, key=len, reverse=True))
 
+# Number words -> day number. Ordinals ("يوم ثالث") and cardinals
+# ("يوم خمسة"), masculine and feminine; the "ال" forms are generated.
+_WORD_NUM_BASE = {}
+for _n, _words in {
+    1: ["أول", "أولى", "واحد", "واحدة"],
+    2: ["ثاني", "ثانية", "اثنان", "اثنين", "اثنتان", "جوج"],
+    3: ["ثالث", "ثالثة", "ثلاثة", "ثلاث"],
+    4: ["رابع", "رابعة", "أربعة", "أربع", "اربعة", "اربع"],
+    5: ["خامس", "خامسة", "خمسة", "خمس"],
+    6: ["سادس", "سادسة", "ستة", "ست"],
+    7: ["سابع", "سابعة", "سبعة", "سبع"],
+    8: ["ثامن", "ثامنة", "ثمانية", "ثمان"],
+    9: ["تاسع", "تاسعة", "تسعة", "تسع"],
+    10: ["عاشر", "عاشرة", "عشرة", "عشر"],
+    11: ["حادي عشر", "حادية عشرة", "أحد عشر", "إحدى عشر", "احد عشر"],
+    12: ["ثاني عشر", "ثانية عشرة", "اثنا عشر", "اثنتا عشر"],
+    13: ["ثالث عشر", "ثالثة عشرة", "ثلاثة عشر"],
+    14: ["رابع عشر", "رابعة عشرة", "أربعة عشر"],
+    15: ["خامس عشر", "خامسة عشرة", "خمسة عشر"],
+    16: ["سادس عشر", "سادسة عشرة", "ستة عشر"],
+    17: ["سابع عشر", "سابعة عشرة", "سبعة عشر"],
+    18: ["ثامن عشر", "ثامنة عشرة", "ثمانية عشر"],
+    19: ["تاسع عشر", "تاسعة عشرة", "تسعة عشر"],
+    20: ["عشرون"],
+    21: ["حادي وعشرون", "واحد وعشرون"],
+    22: ["ثاني وعشرون", "اثنان وعشرون"],
+    23: ["ثالث وعشرون", "ثلاثة وعشرون"],
+    24: ["رابع وعشرون", "أربعة وعشرون"],
+    25: ["خامس وعشرون", "خمسة وعشرون"],
+    26: ["سادس وعشرون", "ستة وعشرون"],
+    27: ["سابع وعشرون", "سبعة وعشرون"],
+    28: ["ثامن وعشرون", "ثمانية وعشرون"],
+    29: ["تاسع وعشرون", "تسعة وعشرون"],
+    30: ["ثلاثون"],
+    31: ["حادي وثلاثون", "واحد وثلاثون"],
+}.items():
+    for _w in _words:
+        _WORD_NUM_BASE[_w] = _n
+# Colloquial day forms: عشرين/ثلاثين instead of عشرون/ثلاثون, and
+# "واحد وعشرين" style compounds.
+for _w, _n in list(_WORD_NUM_BASE.items()):
+    if "وعشرون" in _w:
+        _WORD_NUM_BASE[_w.replace("وعشرون", "وعشرين")] = _n
+    if "وثلاثون" in _w:
+        _WORD_NUM_BASE[_w.replace("وثلاثون", "وثلاثين")] = _n
+_WORD_NUM_BASE["عشرين"] = 20
+_WORD_NUM_BASE["ثلاثين"] = 30
+_WORD_NUM_BASE["اثنين وعشرين"] = 22
+_WORD_NUM = dict(_WORD_NUM_BASE)
+for _w, _n in _WORD_NUM_BASE.items():
+    if not _w.startswith("ال"):
+        _WORD_NUM["ال" + _w] = _n
+_WORD_ALT = "|".join(sorted(_WORD_NUM, key=len, reverse=True))
+
+# Invisible characters WhatsApp/keyboards insert around Latin digits inside
+# RTL text (RLM/LRM, embeddings, isolates) and non-ASCII dashes: all of
+# them break date matching while staying invisible in screenshots, so they
+# are stripped/normalized before any pattern runs.
+_BIDI_RE = re.compile(r"[\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
+_DASH_RE = re.compile(r"[\u2010-\u2015\u2212]")
+
+
+def _normalize(text):
+    text = _BIDI_RE.sub("", text)
+    text = _DASH_RE.sub("-", text)
+    return text
+
+
 _NUM_DATE = re.compile(r"(\d{1,2})\s*[-/.]\s*(\d{1,2})(?:\s*[-/.]\s*(\d{2,4}))?")
-_WORD_DATE = re.compile(r"(\d{1,2})\s+(?:شهر\s+)?(" + _MONTH_ALT + r")\b")
+_WORD_DATE = re.compile(r"(\d{1,2})\s+(?:(?:شهر|من)\s+)?(" + _MONTH_ALT + r")\b")
+_WORD_MONTH_DATE = re.compile(r"(" + _WORD_ALT + r")\s+(?:(?:شهر|من)\s+)?(" + _MONTH_ALT + r")\b")
+_MARKER_NUM = re.compile(r"\b(?:اليوم|يوم|نهار|بتاريخ|في)\s+(\d{1,2})\b")
+_MARKER_WORD = re.compile(r"\b(?:اليوم|يوم|نهار|بتاريخ)\s+(" + _WORD_ALT + r")\b")
+_SPACE_NUM = re.compile(r"(\d{1,2})\s+(\d{1,2})\b")
 _BULLET = re.compile(r"^\s*(?:[-•*]|\d{1,2}\s*[-.)،:]|\(\d{1,2}\))\s*")
 _SEP_TRIM = " \t:：-–—،,؛;|/\\"
 
@@ -37,7 +113,7 @@ def _clean_title(text, span):
 
 def parse_line(line):
     """Return {title, day, month|None, year|None} or None."""
-    text = line.translate(AR_INDIC).strip()
+    text = _normalize(line.translate(AR_INDIC)).strip()
     if not text:
         return None
     m = _WORD_DATE.search(text)
@@ -54,6 +130,28 @@ def parse_line(line):
         if 1 <= day <= 31 and 1 <= month <= 12:
             title = _clean_title(text, m.span())
             return {"title": title, "day": day, "month": month, "year": year} if title else None
+    m = _WORD_MONTH_DATE.search(text)
+    if m:
+        day, month = _WORD_NUM[m.group(1)], MONTH_WORDS[m.group(2)]
+        title = _clean_title(text, m.span())
+        return {"title": title, "day": day, "month": month, "year": None} if title else None
+    m = _MARKER_NUM.search(text)
+    if m:
+        day = int(m.group(1))
+        if 1 <= day <= 31:
+            title = _clean_title(text, m.span())
+            return {"title": title, "day": day, "month": None, "year": None} if title else None
+    m = _MARKER_WORD.search(text)
+    if m:
+        day = _WORD_NUM[m.group(1)]
+        title = _clean_title(text, m.span())
+        return {"title": title, "day": day, "month": None, "year": None} if title else None
+    m = _SPACE_NUM.search(text)
+    if m:
+        day, month = int(m.group(1)), int(m.group(2))
+        if 1 <= day <= 31 and 1 <= month <= 12:
+            title = _clean_title(text, m.span())
+            return {"title": title, "day": day, "month": month, "year": None} if title else None
     return None
 
 
