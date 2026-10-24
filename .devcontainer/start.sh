@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Runs on every Codespace start: install LibreOffice once, then serve.
-set -e
+# NOTE: the codespace image is Debian (trixie) — font package names differ
+# from Ubuntu: Naskh Arabic ships inside fonts-noto-core there.
 if ! command -v soffice >/dev/null 2>&1; then
   echo "Installing LibreOffice (first start only)..."
   sudo apt-get update
   sudo apt-get install -y --no-install-recommends \
-    libreoffice-calc fonts-noto-naskh-arabic fonts-dejavu-core
+    libreoffice-calc fonts-noto-core fonts-dejavu-core
 fi
 cd "$(dirname "$0")/.."
 if ! pgrep -f "python3 app.py" >/dev/null 2>&1; then
