@@ -133,15 +133,20 @@ function bareJid(jid) {
 async function handleIncoming(sock, msg) {
   const remoteJid = msg.key.remoteJid;
   if (!remoteJid) return;
-  const own = bareJid(sock.user && sock.user.id);
+  // The account's own IDs: sock.user.id is the phone-number form, and
+  // sock.user.lid is the anonymous LID form (present on LID accounts).
+  // WhatsApp delivers the self-chat under the LID, so BOTH forms must
+  // count as "self" — matching only the phone form drops every message.
+  const ownIds = new Set(
+    [bareJid(sock.user && sock.user.id), bareJid(sock.user && sock.user.lid)]
+      .filter(Boolean)
+  );
   const sender = bareJid(remoteJid);
-  // LID accounts: the chat may arrive under a LID while the account id is
-  // the phone number (or vice versa) — remoteJidAlt carries the other form.
   const senderAlt = bareJid(msg.key.remoteJidAlt);
-  const isSelf = sender === own || (senderAlt && senderAlt === own);
+  const isSelf = ownIds.has(sender) || (senderAlt && ownIds.has(senderAlt));
   // Diagnostic only: message kinds + routing decision, never message text.
   log.info({ ev: 'incoming', remoteJid, remoteJidAlt: msg.key.remoteJidAlt || null,
-             fromMe: !!msg.key.fromMe, own, sender, isSelf,
+             fromMe: !!msg.key.fromMe, own: [...ownIds], sender, isSelf,
              sentEcho: sentIds.has(msg.key.id) });
   if (
     remoteJid === 'status@broadcast' ||
