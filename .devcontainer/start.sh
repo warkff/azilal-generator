@@ -11,6 +11,12 @@ if ! command -v soffice >/dev/null 2>&1; then
   sudo apt-get install -y libreoffice-calc fonts-noto-core fonts-dejavu-core
 fi
 
+# 2b) Node.js + npm + gh (WhatsApp gateway + port visibility) on first run only
+if ! command -v node >/dev/null 2>&1 || ! command -v gh >/dev/null 2>&1; then
+  sudo apt-get update -qq
+  sudo apt-get install -y nodejs npm gh
+fi
+
 # 3) Restart the service so it always runs the pulled code
 if pgrep -f "python3 app.py" >/dev/null 2>&1; then
   pkill -f "python3 app.py" 2>/dev/null
