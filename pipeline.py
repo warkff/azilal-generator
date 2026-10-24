@@ -378,6 +378,12 @@ def _generate_locked(raw_req):
         return out
 
 
+def bundle_name(raw_req):
+    """Descriptive name for the two-file zip: '<member>_<month>_<year>.zip'."""
+    m = MEMBERS[raw_req["member"]]
+    return f"{m['first']} {m['last']}_{MONTHS_AR[raw_req['month'] - 1]}_{raw_req['year']}.zip"
+
+
 def generate(req):
     """Serialize generations: the free host has ~512MB RAM, and each
     LibreOffice run is heavy — never run two at once."""
