@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        libreoffice-calc fonts-noto-naskh-arabic fonts-dejavu-core && \
+        libreoffice-calc fonts-noto-core fonts-dejavu-core && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
