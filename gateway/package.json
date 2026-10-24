@@ -1,0 +1,1 @@
+{"dependencies":{"@whiskeysockets/baileys":"^6.7.0","https-proxy-agent":"^7.0.0","pino":"^9.0.0","qrcode":"^1.5.4"},"description":"Baileys gateway: links the user's own WhatsApp number via QR (like WhatsApp Web) and forwards messages to the Azilal bot service","main":"index.js","name":"azilal-whatsapp-gateway","private":true,"scripts":{"start":"node index.js"},"version":"1.0.0"}
