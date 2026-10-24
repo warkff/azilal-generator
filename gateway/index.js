@@ -123,29 +123,40 @@ async function executeActions(sock, jid, actions) {
   if (sentIds.size > 1000) sentIds.clear();
 }
 
+// Bare digits of a JID, e.g. "212703758191:12@s.whatsapp.net" -> "212703758191".
+function bareJid(jid) {
+  return (jid || '').split(':')[0].split('@')[0];
+}
+
 // The linked number's digits, e.g. sock.user.id "212703758191:12@s.whatsapp.net".
 // Read at message time: sock.user is empty until after QR scan + connect.
 async function handleIncoming(sock, msg) {
   const remoteJid = msg.key.remoteJid;
   if (!remoteJid) return;
-  const own = sock.user && sock.user.id
-    ? sock.user.id.split(':')[0].split('@')[0]
-    : '';
+  const own = bareJid(sock.user && sock.user.id);
+  const sender = bareJid(remoteJid);
+  // LID accounts: the chat may arrive under a LID while the account id is
+  // the phone number (or vice versa) — remoteJidAlt carries the other form.
+  const senderAlt = bareJid(msg.key.remoteJidAlt);
+  const isSelf = sender === own || (senderAlt && senderAlt === own);
+  // Diagnostic only: message kinds + routing decision, never message text.
+  log.info({ ev: 'incoming', remoteJid, remoteJidAlt: msg.key.remoteJidAlt || null,
+             fromMe: !!msg.key.fromMe, own, sender, isSelf,
+             sentEcho: sentIds.has(msg.key.id) });
   if (
     remoteJid === 'status@broadcast' ||
     remoteJid.endsWith('@g.us') ||
     remoteJid.endsWith('@broadcast')
   ) return; // status + groups are not bot chats
-  const sender = remoteJid.replace('@s.whatsapp.net', '').replace('@lid', '');
-  if (msg.key.fromMe) {
-    // Only the self-chat, and only messages the phone sent (not the
-    // gateway's own replies echoing back).
-    if (sender !== own || sentIds.has(msg.key.id)) return;
-  } else if (sender !== own) {
+  if (!isSelf) {
     // Anyone else messaging this number must NOT get bot replies.
     return;
   }
+  // The gateway's own replies echoing back must not trigger it again.
+  if (msg.key.fromMe && sentIds.has(msg.key.id)) return;
   const content = unwrap(msg.message);
+  // Diagnostic only: the kind of content, never its text.
+  log.info({ ev: 'content', kind: content ? Object.keys(content)[0] : null });
   if (!content) return;
   try {
     if (content.audioMessage) {
@@ -237,6 +248,8 @@ async function start() {
     }
   });
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    // Diagnostic only: event kinds, never message text.
+    log.info({ ev: 'upsert', type, count: messages.length });
     if (type !== 'notify') return; // ignore history sync on (re)connect
     for (const m of messages) {
       await handleIncoming(sock, m);
