@@ -1,1 +1,12 @@
-{"image":"mcr.microsoft.com/devcontainers/python:3.12","name":"Azilal Generator","portsAttributes":{"7860":{"label":"Azilal Generator API + WhatsApp webhook","onAutoForward":"notify"}},"postStartCommand":"bash .devcontainer/start.sh"}
+{
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "name": "Azilal Generator",
+  "portsAttributes": {
+    "7860": {
+      "label": "Azilal Generator API + WhatsApp webhook",
+      "onAutoForward": "notify",
+      "visibility": "public"
+    }
+  },
+  "postStartCommand": "bash .devcontainer/start.sh"
+}
