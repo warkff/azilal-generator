@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
-# Runs on every Codespace start: install LibreOffice once, then serve.
-# NOTE: the codespace image is Debian (trixie) — font package names differ
-# from Ubuntu: Naskh Arabic ships inside fonts-noto-core there.
+# Azilal generator service: auto-update from GitHub, then (re)start on port 7860.
+cd "$(dirname "$0")/.." || exit 1
+
+# 1) Always pull the latest code first (best effort, offline-safe)
+git pull --ff-only 2>/dev/null || true
+
+# 2) LibreOffice on first run only
 if ! command -v soffice >/dev/null 2>&1; then
-  echo "Installing LibreOffice (first start only)..."
-  sudo apt-get update
-  sudo apt-get install -y --no-install-recommends \
-    libreoffice-calc fonts-noto-core fonts-dejavu-core
+  sudo apt-get update -qq
+  sudo apt-get install -y libreoffice-calc fonts-noto-core fonts-dejavu-core
 fi
-cd "$(dirname "$0")/.."
-if ! pgrep -f "python3 app.py" >/dev/null 2>&1; then
-  PORT=7860 nohup python3 app.py > /tmp/azilal-server.log 2>&1 &
-  echo "Azilal generator starting on port 7860 (log: /tmp/azilal-server.log)"
-else
-  echo "Azilal generator already running"
+
+# 3) Restart the service so it always runs the pulled code
+if pgrep -f "python3 app.py" >/dev/null 2>&1; then
+  pkill -f "python3 app.py" 2>/dev/null
+  sleep 1
 fi
+PORT=7860 nohup python3 app.py > /tmp/azilal-server.log 2>&1 &
+echo "Azilal service up on port 7860 @ $(git rev-parse --short HEAD 2>/dev/null)"
