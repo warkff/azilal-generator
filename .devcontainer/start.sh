@@ -18,3 +18,12 @@ if pgrep -f "python3 app.py" >/dev/null 2>&1; then
 fi
 PORT=7860 nohup python3 app.py > /tmp/azilal-server.log 2>&1 &
 echo "Azilal service up on port 7860 @ $(git rev-parse --short HEAD 2>/dev/null)"
+
+# 4) Keep port 7860 PUBLIC on every start (API starts reset visibility to private)
+if command -v gh >/dev/null 2>&1; then
+  if [ -n "${CODESPACE_NAME:-}" ]; then
+    gh codespace ports visibility 7860:public -c "$CODESPACE_NAME" 2>/dev/null || true
+  else
+    gh codespace ports visibility 7860:public 2>/dev/null || true
+  fi
+fi
