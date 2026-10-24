@@ -29,6 +29,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+        self.send_header("Access-Control-Expose-Headers", "Content-Disposition")
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -107,10 +108,14 @@ class Handler(BaseHTTPRequestHandler):
                 for name, blob in files.items():
                     z.writestr(name, blob)
             blob = buf.getvalue()
+            try:
+                zip_name = pipeline.bundle_name(req)
+            except Exception:
+                zip_name = "تقارير.zip"
             self.send_response(200)
             self._cors()
             self.send_header("Content-Type", "application/zip")
-            self.send_header("Content-Disposition", _disposition("تقارير.zip"))
+            self.send_header("Content-Disposition", _disposition(zip_name))
             self.send_header("Content-Length", str(len(blob)))
             self.end_headers()
             self.wfile.write(blob)
